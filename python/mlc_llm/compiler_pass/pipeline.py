@@ -91,9 +91,10 @@ def _mlc_llm_pipeline(  # pylint: disable=too-many-arguments
         seq = tvm.transform.Sequential(
             [
                 # Phase 0. Add additional information for compilation and remove unused Relax func
-                DispatchKVCacheCreation(target, flashinfer, metadata),
+                #DispatchKVCacheCreation(target, flashinfer, metadata),
                 AttachVariableBounds(variable_bounds),
-                AttachLogitProcessFunc(target),
+                #AttachCUDAGraphSymbolicCaptureHints(cuda_graph_symbolic_capture_hints),
+                #AttachLogitProcessFunc(target),
                 AttachAdditionalPrimFuncs(additional_tirs),
                 AttachAllocEmbeddingTensorFunc(metadata),
                 AttachGPUSamplingFunc(target, variable_bounds),
@@ -105,7 +106,7 @@ def _mlc_llm_pipeline(  # pylint: disable=too-many-arguments
                 FuseFTDequantizeEpilogue(),
                 FuseDequantizeTranspose(),
                 CublasDispatch() if cublas_gemm else tvm.transform.Sequential([]),
-                FuseAddRMSNorm(target=target),
+                #FuseAddRMSNorm(target=target),
                 FuseTransposeMatmul(),
                 _DebugDump("debug-phase1.py", debug_dump, show_meta=False),
                 # Phase 2. Lowering to TIR, inherited TVM Relax's official "zero" pipeline
@@ -136,7 +137,7 @@ def _mlc_llm_pipeline(  # pylint: disable=too-many-arguments
                 ),
                 _DebugDump("debug-phase4.py", debug_dump, show_meta=False),
                 _LogProgress("Lowering to VM bytecode"),
-                LiftTIRGlobalBufferAlloc(),
+                #LiftTIRGlobalBufferAlloc(),
                 (
                     tvm.tir.transform.ForceNarrowIndexToInt32()
                     if target.kind.name != "cuda"
