@@ -18,7 +18,7 @@ public class ChatModule {
     public ChatModule() {
         Function createFunc = Function.getFunction("mlc.llm_chat_create");
         assert createFunc != null;
-        llmChat = createFunc.pushArg(Device.opencl().deviceType).pushArg(0).invoke().asModule();
+        llmChat = createFunc.pushArg(Device.cpu().deviceType).pushArg(0).invoke().asModule();
         reloadFunc = llmChat.getFunction("reload");
         unloadFunc = llmChat.getFunction("unload");
         prefillFunc = llmChat.getFunction("prefill");

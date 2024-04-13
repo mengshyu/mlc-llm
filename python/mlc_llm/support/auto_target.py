@@ -344,7 +344,7 @@ PRESET = {
     },
     "android:generic": {
         "target": {
-            "kind": "opencl",
+            "kind": "llvm",
             "host": {
                 "kind": "llvm",
                 "mtriple": "aarch64-linux-android",
