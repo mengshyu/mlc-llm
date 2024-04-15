@@ -54,6 +54,11 @@ set(USE_PROFILER OFF)
 set(USE_GTEST OFF)
 set(USE_LIBBACKTRACE OFF)
 set(BUILD_DUMMY_LIBTVM ON)
+set(USE_HEXAGON ON)
+set(USE_HEXAGON_SDK /local/mnt/workspace/Qualcomm/Hexagon_SDK/5.5.0.1)
+set(USE_HEXAGON_ARCH "v73")
+
+
 if (NOT DEFINED TVM_HOME)
   set(TVM_HOME 3rdparty/tvm)
 endif (NOT DEFINED TVM_HOME)

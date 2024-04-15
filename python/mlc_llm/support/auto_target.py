@@ -76,7 +76,9 @@ def _detect_target_gpu(hint: str) -> Tuple[Target, BuildFunc]:
         return target, _build_default()
     if hint in PRESET:
         preset = PRESET[hint]
-        target = Target(preset["target"])  # type: ignore[index]
+        target = Target(' hexagon -mtriple=hexagon -mcpu=hexagonv73 -mattr=+hvxv73,+hvx-length128b,+hvx-qfloat,-hvx-ieee-fp --num-cores=4 --vtcm-capacity=8388608', host='{"mtriple": "aarch64-linux-android", "kind": "llvm"}')
+        #target = Target(preset["target"])  # type: ignore[index]
+
         build = preset.get("build", _build_default)  # type: ignore[attr-defined]
         return target, build()
     if _is_device(hint):
