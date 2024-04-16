@@ -23,10 +23,12 @@ cmake .. \
       -DANDROID_PLATFORM=android-24 \
       -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ON \
       -DANDROID_STL=c++_static \
-      -DUSE_HEXAGON_SDK=OFF \
       -DMLC_LLM_INSTALL_STATIC_LIB=ON \
+      -DUSE_HEXAGON=ON \
+      -DUSE_HEXAGON_RPC=OFF \
+      -DUSE_HEXAGON_ARCH="v73" \
+      -DUSE_HEXAGON_SDK=/local/mnt/workspace/Qualcomm/Hexagon_SDK/5.5.0.1 \
       -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON \
-      -DUSE_OPENCL=ON \
       -DUSE_CUSTOM_LOGGING=ON \
 
 cmake --build . --target tvm4j_runtime_packed --config release 
