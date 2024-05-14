@@ -55,7 +55,7 @@ def detect_target_and_host(target_hint: str, host_hint: str = "auto") -> Tuple[T
 
 
 def _detect_target_gpu(hint: str) -> Tuple[Target, BuildFunc]:
-    if hint in ["iphone", "android", "webgpu", "mali", "opencl"]:
+    if hint in ["iphone", "android", "webgpu", "mali", "opencl", "cpu"]:
         hint += ":generic"
     if hint == "auto" or hint in AUTO_DETECT_DEVICES:
         target: Optional[Target] = None
@@ -476,5 +476,10 @@ PRESET = {
             "supports_16bit_buffer": 1,
             "supports_storage_buffer_storage_class": 1,
         },
+    },
+    "cpu:generic": {
+        "target": {
+            "kind": "llvm",
+            },
     },
 }

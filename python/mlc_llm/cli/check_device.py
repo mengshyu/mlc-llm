@@ -21,6 +21,8 @@ def main():
         if _check_device(as_device(device_str, i)):
             device_ids.append(i)
             i += 1
+            if "cpu" == device_str:
+                break
         else:
             break
     print(f"check_device:{','.join(str(i) for i in device_ids)}")
