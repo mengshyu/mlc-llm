@@ -86,9 +86,10 @@ def attention(  # pylint: disable=invalid-name,too-many-locals,too-many-statemen
         ) / math.sqrt(d)
         if attn_score_scaling_factor != 1.0:
             attn_weights = attn_weights * attn_score_scaling_factor
-        attn_weights = attn_weights.maximum(tir.min_value(model_dtype)).minimum(
-            casual_mask.astype(qk_dtype)
-        )
+        if casual_mask is not None:
+            attn_weights = attn_weights.maximum(tir.min_value(model_dtype)).minimum(
+                casual_mask.astype(qk_dtype)
+            )
         attn_weights = op.softmax(attn_weights.astype("float32"), axis=-1).astype(model_dtype)
         output = op.matmul(attn_weights, v)  # [b, h, s, d] <= [b, h, s, t] x [b, h, t, d]
         output = op.permute_dims(output, [0, 2, 1, 3])  #  [b, s, h, d]
