@@ -6,7 +6,9 @@ import dataclasses
 import logging
 from typing import Any, Dict, Tuple
 
+import tvm
 from tvm import relax
+from tvm.script import tir as T
 from tvm.relax.frontend import nn
 from tvm.relax.frontend.nn import Module, Tensor
 from tvm.relax.frontend.nn.modules import Conv2D
@@ -17,11 +19,14 @@ from tvm.relax.frontend.nn.op import (
     permute_dims,
     reshape,
     softmax,
+    empty,
     wrap_nested,
+    tensor_ir_op
 )
 from tvm.relax.op import arange
 
 from mlc_llm.support.config import ConfigBase
+from mlc_llm.nn import _attention_sequence_prefill
 
 logger = logging.getLogger(__name__)
 
@@ -146,40 +151,51 @@ class CLIPAttention(Module):  # pylint: disable=too-many-instance-attributes
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
-    def _shape(self, tensor: Tensor, seq_len: int, bsz: int):
-        reshape_tensor = reshape(tensor, shape=(bsz, seq_len, self.num_heads, self.head_dim))
-        permute_tensor = permute_dims(reshape_tensor, axes=(0, 2, 1, 3))
-        return permute_tensor
-
     def forward(
         self,
         hidden_states: Tensor,
     ) -> Tensor:
-        bsz, tgt_len, embed_dim = hidden_states.shape
-        query_states = self._shape(self.q_proj(hidden_states) * self.scale, tgt_len, bsz)
-        key_states = self._shape(self.k_proj(hidden_states), tgt_len, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), tgt_len, bsz)
+        bsz, seq_len, embed_dim = hidden_states.shape
+        query_states = self.q_proj(hidden_states) * self.scale
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
         proj_shape = (
-            bsz * self.num_heads,
-            -1,
+            bsz * seq_len,
+            self.num_heads,
             self.head_dim,
-        )  # shape of (batch*num_heads, seq_len,head_dim)
+        )
 
-        query_states = reshape(query_states, shape=proj_shape)
-        key_states = reshape(key_states, shape=proj_shape)
-        value_states = reshape(value_states, shape=proj_shape)
+        q = reshape(query_states, shape=proj_shape)
+        k = reshape(key_states, shape=proj_shape)
+        v = reshape(value_states, shape=proj_shape)
 
-        trans_key_states = permute_dims(key_states, axes=(0, 2, 1))
+        target = tvm.target.Target("cuda")
 
-        attn_weights = matmul(query_states, trans_key_states)
-        attn_weights = softmax(attn_weights, axis=-1)
-        attn_output = matmul(attn_weights, value_states)
-        attn_output = reshape(attn_output, shape=(bsz, self.num_heads, tgt_len, self.head_dim))
-        attn_output = permute_dims(attn_output, axes=(0, 2, 1, 3))
-        attn_output = reshape(attn_output, shape=(bsz, tgt_len, embed_dim))
+        batch = 1
+        num_nodes = bsz * seq_len
+        q_rope_position = empty([num_nodes], dtype="int32")
+        k_rope_pos_offset = empty([batch], dtype="int32")
+        causal = T.int32(0)
+        attn_score_scaling_factor = T.float32(1.0)
+
+        attn_output, _ = tensor_ir_op(
+        _attention_sequence_prefill(
+            self.num_heads, self.num_heads, self.head_dim, q.dtype, target
+        ),
+        "sequence_prefill",
+        [
+            q, k, v
+         ],
+        [
+            Tensor.placeholder(proj_shape, q.dtype),
+            Tensor.placeholder([num_nodes, self.num_heads], q.dtype),
+        ],
+    )
+
+        attn_output = reshape(attn_output, shape=(bsz, seq_len, self.num_heads, self.head_dim))
+        attn_output = reshape(attn_output, shape=(bsz, seq_len, embed_dim))
         attn_output = self.out_proj(attn_output)
-
         return attn_output
 
 
