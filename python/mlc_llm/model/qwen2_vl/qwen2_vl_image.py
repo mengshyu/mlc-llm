@@ -147,7 +147,7 @@ class Qwen2VisionModel(Module):
         self.merger = PatchMerger(dim=config.vision_config["hidden_size"], context_dim = config.vision_config["embed_dim"])
 
     def forward(self, hidden_states: Tensor) -> Tensor:
-        hidden_states = self.patch_embed(hidden_states)
+        #hidden_states = self.patch_embed(hidden_states)
         for layer_id, layer in enumerate(self.blocks):
             hidden_states = layer(hidden_states)
 

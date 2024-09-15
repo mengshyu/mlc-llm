@@ -59,6 +59,42 @@ class ImageProcessor(Module):
                     w >= h, tir.generic.cast(tir.div(new_w, ratio), "int64"), scale * pad_num
                 )
                 return (new_h, new_w)
+            elif "smart_resize" == params["mode"] and "factor" in params and "min_pixels" in params and "max_pixels" in params:
+                """Rescales the image so that the following conditions are met:
+                1. Both dimensions (height and width) are divisible by 'factor'.
+                2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
+                3. The aspect ratio of the image is maintained as closely as possible.
+                """
+                factor, min_pixels, max_pixels = params["factor"], params["min_pixels"], params["max_pixels"]
+
+                #if tir.any([h < factor, w < factor]):
+                #    raise ValueError(f"height:{h} or width:{w} must be larger than factor:{factor}")
+                #elif max(h, w) / min(h, w) > 200:
+                #    raise ValueError(
+                #        f"absolute aspect ratio must be smaller than 200, got {max(h, w) / min(h, w)}"
+                #    )
+
+                h_bar = tir.round(tir.div(tir.generic.cast(h, "float32"), factor)) * factor
+                w_bar = tir.round(tir.div(tir.generic.cast(w, "float32"), factor)) * factor
+                h_bar = tir.generic.cast(h_bar, "int64")
+                w_bar = tir.generic.cast(w_bar, "int64")
+                #beta = tir.if_then_else(hw_bar > max_pixels, tir.sqrt(tir.div(h*w, max_pixels)), 0)
+                #beta = tir.if_then_else(hw_bar < min_pixels, tir.sqrt(tir.div(min_pixels, h*w)), 0)
+                #h_bar = tir.if_then_else(hw_bar > max_pixels, tir.floor(tir.div(h,tir.div(beta,factor))), h_bar)
+                #h_bar = tir.if_then_else(hw_bar < min_pixels, tir.ceil(tir.div(h*beta,factor)), h_bar)
+
+
+                #if hw_bar > max_pixels:
+                #    beta = tir.sqrt((height * width) / max_pixels)
+                #    h_bar = tir.floor(height / beta / factor) * factor
+                #    w_bar = tir.floor(width / beta / factor) * factor
+                #elif hw_bar < min_pixels:
+                #    beta = tir.sqrt(min_pixels / (height * width))
+                #    h_bar = tir.ceil(height * beta / factor) * factor
+                #    w_bar = tir.ceil(width * beta / factor) * factor
+                return h_bar, w_bar
+
+
             else:
                 assert False, "not supported resize parameter"
 
@@ -219,5 +255,37 @@ class ImageProcessor(Module):
             "pad",
             [image, t, b],
             [Tensor.placeholder((n, tar, w, c), image.dtype)],
+        )
+        return out
+
+    def repeat_batch(self, image: Tensor, reps):
+        def create_repeat_batch_func(out_n):
+            @T.prim_func
+            def repeat_batch_func(image: T.handle, out: T.handle):
+                n, c, h, w = T.int64(), T.int64(), T.int64(), T.int64()
+                image_buf = T.match_buffer(image, (n, c, h, w))
+                out_buf = T.match_buffer(out, (out_n, c, h, w))
+
+                for n_idx in T.thread_binding(out_n, thread="blockIdx.x"):
+                #for n_idx in range(out_n):
+                    for c_idx, h_idx, w_idx in T.grid(c, h, w):
+                        with T.block("compute"):
+                            T.reads(image_buf[0, c_idx, h_idx, w_idx])
+                            T.writes(out_buf[n_idx, c_idx, h_idx, w_idx])
+                            out_buf[n_idx, c_idx, h_idx, w_idx] = image_buf[0, c_idx, h_idx, w_idx]
+
+            return repeat_batch_func
+
+        n, c, h, w = image.shape
+        if n == 1:
+            out_n = n * reps
+        else:
+            return image
+
+        out = op.tensor_ir_op(
+            create_repeat_batch_func(out_n),
+            "repeat_batch",
+            [image],
+            [Tensor.placeholder((out_n, c, h, w), image.dtype)],
         )
         return out
