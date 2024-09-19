@@ -242,6 +242,7 @@ class QWen2VLModel(nn.Module):  # pylint: disable=too-many-instance-attributes
         self.tensor_parallel_shards = config.tensor_parallel_shards
         self.head_dim = config.head_dim
         self.visual = Qwen2VisionModel(config)
+        self.vision_config = config.vision_config
         self.image_processor = ImageProcessor()
 
     def to(self, dtype: Optional[str] = None):
@@ -275,20 +276,19 @@ class QWen2VLModel(nn.Module):  # pylint: disable=too-many-instance-attributes
         return self.model.embed_tokens(input_ids)
 
     def image_preprocess(self, image: Tensor, num_crops=16,
-            patch_size = 14, merge_size = 2,temporal_patch_size = 2,
-            min_pixels = 3136, max_pixels = 12845056):
+            merge_size = 2, min_pixels = 3136, max_pixels = 12845056):
 
+        patch_size = self.vision_config["patch_size"]
+        temporal_patch_size = self.vision_config["temporal_patch_size"]
         factor = patch_size * merge_size
-
         image = self.image_processor.resize(
             image, {"mode":"smart_resize", "factor":factor, "min_pixels":min_pixels, "max_pixels":max_pixels}
         )
-
         image = self.image_processor.rescale(image)
         image = self.image_processor.normalize(image)
         if 3 == image.shape[3]: #Check if channel last do transpose
             image = op.permute_dims(image, axes=(0, 3, 1, 2)) #NHWC->NCHW
-        image = self.image_processor.repeat_batch(image, temporal_patch_size)
+        image = op.repeat(image, repeats = temporal_patch_size, axis = 0)
 
         n, c, h, w = image.shape
         grid_t = n // temporal_patch_size
@@ -316,7 +316,7 @@ class QWen2VLModel(nn.Module):  # pylint: disable=too-many-instance-attributes
     def image_embed(self, pixel_values: Tensor):
         pixel_values = self.image_preprocess(pixel_values)
         pixel_values = pixel_values.astype(self.dtype)
-        #pixel_values = self.visual(pixel_values)
+        pixel_values = self.visual(pixel_values)
         return pixel_values
 
     def prefill(self, input_embed: Tensor, paged_kv_cache: PagedKVCache):

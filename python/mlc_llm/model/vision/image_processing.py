@@ -257,35 +257,3 @@ class ImageProcessor(Module):
             [Tensor.placeholder((n, tar, w, c), image.dtype)],
         )
         return out
-
-    def repeat_batch(self, image: Tensor, reps):
-        def create_repeat_batch_func(out_n):
-            @T.prim_func
-            def repeat_batch_func(image: T.handle, out: T.handle):
-                n, c, h, w = T.int64(), T.int64(), T.int64(), T.int64()
-                image_buf = T.match_buffer(image, (n, c, h, w))
-                out_buf = T.match_buffer(out, (out_n, c, h, w))
-
-                for n_idx in T.thread_binding(out_n, thread="blockIdx.x"):
-                #for n_idx in range(out_n):
-                    for c_idx, h_idx, w_idx in T.grid(c, h, w):
-                        with T.block("compute"):
-                            T.reads(image_buf[0, c_idx, h_idx, w_idx])
-                            T.writes(out_buf[n_idx, c_idx, h_idx, w_idx])
-                            out_buf[n_idx, c_idx, h_idx, w_idx] = image_buf[0, c_idx, h_idx, w_idx]
-
-            return repeat_batch_func
-
-        n, c, h, w = image.shape
-        if n == 1:
-            out_n = n * reps
-        else:
-            return image
-
-        out = op.tensor_ir_op(
-            create_repeat_batch_func(out_n),
-            "repeat_batch",
-            [image],
-            [Tensor.placeholder((out_n, c, h, w), image.dtype)],
-        )
-        return out
