@@ -275,25 +275,26 @@ class QWen2VLModel(nn.Module):  # pylint: disable=too-many-instance-attributes
             input_ids = op.ccl_broadcast_from_worker0(input_ids)
         return self.model.embed_tokens(input_ids)
 
-    def image_preprocess(self, image: Tensor, num_crops=16,
+    def image_preprocess(self, pixel_values: Tensor, num_crops=16,
             merge_size = 2, min_pixels = 3136, max_pixels = 12845056):
 
+        pixel_values = op.permute_dims(pixel_values, axes=(0, 2, 3, 1))  # NCHW -> NHWC
         patch_size = self.vision_config["patch_size"]
         temporal_patch_size = self.vision_config["temporal_patch_size"]
         factor = patch_size * merge_size
-        image = self.image_processor.resize(
-            image, {"mode":"smart_resize", "factor":factor, "min_pixels":min_pixels, "max_pixels":max_pixels}
+        pixel_values = self.image_processor.resize(
+            pixel_values, {"mode":"smart_resize", "factor":factor, "min_pixels":min_pixels, "max_pixels":max_pixels}
         )
-        image = self.image_processor.rescale(image)
-        image = self.image_processor.normalize(image)
-        if 3 == image.shape[3]: #Check if channel last do transpose
-            image = op.permute_dims(image, axes=(0, 3, 1, 2)) #NHWC->NCHW
-        image = op.repeat(image, repeats = temporal_patch_size, axis = 0)
+        pixel_values = self.image_processor.rescale(pixel_values)
+        pixel_values = self.image_processor.normalize(pixel_values)
+        if 3 == pixel_values.shape[3]: #Check if channel last do transpose
+            pixel_values = op.permute_dims(pixel_values, axes=(0, 3, 1, 2)) #NHWC->NCHW
+        pixel_values = op.repeat(pixel_values, repeats = temporal_patch_size, axis = 0)
 
-        n, c, h, w = image.shape
+        n, c, h, w = pixel_values.shape
         grid_t = n // temporal_patch_size
         grid_h, grid_w = h // patch_size, w // patch_size
-        image = op.reshape(image, shape = (
+        pixel_values = op.reshape(pixel_values, shape = (
             grid_t,
             temporal_patch_size,
             c,
@@ -306,11 +307,11 @@ class QWen2VLModel(nn.Module):  # pylint: disable=too-many-instance-attributes
             )
         )
 
-        image = op.permute_dims(image, axes=(0, 3, 6, 4, 7, 2, 1, 5, 8))
-        image = op.reshape(image, shape = (
+        pixel_values = op.permute_dims(pixel_values, axes=(0, 3, 6, 4, 7, 2, 1, 5, 8))
+        pixel_values = op.reshape(pixel_values, shape = (
                 grid_t * grid_h * grid_w, c * temporal_patch_size * patch_size * patch_size
             ))
-        return image
+        return pixel_values
 
 
     def image_embed(self, pixel_values: Tensor):
@@ -399,11 +400,7 @@ class QWen2VLModel(nn.Module):  # pylint: disable=too-many-instance-attributes
             },
             "image_embed": {
                 "pixel_values": nn.spec.Tensor(
-                    [
-                        "height",
-                        "width",
-                        3
-                    ],
+                    [ 1, 3, "image_height", "image_width"],
                     "uint8",
                 ),
                 "$": {
