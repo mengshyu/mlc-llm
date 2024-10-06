@@ -326,7 +326,8 @@ Result<std::vector<Data>> CreatePrompt(const Conversation& conv,
 
             int embed_size = (image_size * image_size) / (patch_size * patch_size);
 
-            auto image_ndarray = ClipPreprocessor(image_data_res.Unwrap(), image_size, device);
+            //auto image_ndarray = ClipPreprocessor(image_data_res.Unwrap(), image_size, device);
+            auto image_ndarray = Bypass(image_data_res.Unwrap(), image_size, device);
             // lazily commit text data
             if (pending_text.length() != 0) {
               message_list.push_back(TextData(pending_text));

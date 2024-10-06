@@ -24,6 +24,9 @@ Result<tvm::runtime::NDArray> LoadImageFromBase64(const std::string& base64_str)
 tvm::runtime::NDArray ClipPreprocessor(tvm::runtime::NDArray image_data, int target_size,
                                        DLDevice device);
 
+tvm::runtime::NDArray Bypass(tvm::runtime::NDArray image_data, int target_size,
+                                       DLDevice device);
+
 }  // namespace json_ffi
 }  // namespace llm
 }  // namespace mlc

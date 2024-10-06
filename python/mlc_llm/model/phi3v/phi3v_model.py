@@ -4,11 +4,11 @@ TODO: add docstring
 """
 
 import dataclasses
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from tvm import relax, te, tir
 from tvm.relax.frontend import nn
-from tvm.relax.frontend.nn import Tensor, op
+from tvm.relax.frontend.nn import Tensor, Tuple, op
 
 from mlc_llm import op as op_ext
 from mlc_llm.model.phi3 import Phi3Model
@@ -278,7 +278,7 @@ class Phi3VForCausalLM(nn.Module):
 
         return combined_image
 
-    def image_embed(self, pixel_values: Tensor) -> Tensor:
+    def image_embed(self, pixel_values: Tensor, resized_height, resized_width) -> Tensor:
         n, h, w, c = pixel_values.shape  # pylint: disable=unused-variable
         pixel_values = self.image_preprocess(pixel_values)
         pixel_values = pixel_values.astype(self.dtype)
@@ -321,6 +321,7 @@ class Phi3VForCausalLM(nn.Module):
             },
             "image_embed": {
                 "pixel_values": nn.spec.Tensor([1, "image_height", "image_width", 3], "uint8"),
+                "resized_height": nn.spec.Int(), "resized_width": nn.spec.Int(),
                 "$": {
                     "param_mode": "packed",
                     "effect_mode": "none",

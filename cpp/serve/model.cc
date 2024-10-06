@@ -114,7 +114,9 @@ class ModelImpl : public ModelObj {
     NVTXScopedRange nvtx_scope("ImageEmbed");
     CHECK(ft_.image_embed_func_.defined()) << "`image_embed` function is not found in the model. ";
     auto image_dref_or_nd = ft_.CopyToWorker0(image, "image", image.Shape());
-    ObjectRef embeddings = ft_.image_embed_func_(image_dref_or_nd, params_);
+    ShapeTuple h = {100};
+    ShapeTuple w = {100};
+    ObjectRef embeddings = ft_.image_embed_func_(image_dref_or_nd, h, w, params_);
     if (dst != nullptr) {
       CHECK(dst->defined());
       ft_.nd_copy_embedding_to_offset_func_(embeddings, *dst, offset);

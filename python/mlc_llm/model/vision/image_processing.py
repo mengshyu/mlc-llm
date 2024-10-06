@@ -124,15 +124,17 @@ class ImageProcessor(Module):
                 n, c, h, w = T.int64(), T.int64(), T.int64(), T.int64()
                 image_buf = T.match_buffer(image, (n, h, w, c), dtype=dtype)
                 out_buf = T.match_buffer(out, (n, h, w, c), dtype=o_dtype)
-                for n_idx in T.thread_binding(n, thread="blockIdx.x"):
-                    for h_idx, w_idx, c_idx in T.grid(h, w, c):
-                        with T.block("compute"):
-                            T.reads(image_buf[n_idx, h_idx, w_idx, c_idx])
-                            T.writes(out_buf[n_idx, h_idx, w_idx, c_idx])
-                            out_buf[n_idx, h_idx, w_idx, c_idx] = (
-                                T.cast(image_buf[n_idx, h_idx, w_idx, c_idx], o_dtype)
-                                * rescale_factor
-                            )
+                n_idx = 0
+                for h_idx in T.thread_binding(h, thread="blockIdx.x"):
+                    for w_idx in T.thread_binding(w, thread="blockIdx.y"):
+                        for c_idx in T.thread_binding(c, thread="threadIdx.x"):
+                            with T.block("compute"):
+                                T.reads(image_buf[n_idx, h_idx, w_idx, c_idx])
+                                T.writes(out_buf[n_idx, h_idx, w_idx, c_idx])
+                                out_buf[n_idx, h_idx, w_idx, c_idx] = (
+                                    T.cast(image_buf[n_idx, h_idx, w_idx, c_idx], o_dtype)
+                                    * rescale_factor
+                                )
 
             return rescale_func
 
@@ -154,24 +156,31 @@ class ImageProcessor(Module):
                 out_buf = T.match_buffer(out, (n, h, w, c), dtype=o_dtype)
                 mean = _var(o_dtype)
                 stddev = _var(o_dtype)
-                for n_idx in T.thread_binding(n, thread="blockIdx.x"):
-                    for h_idx, w_idx, c_idx in T.grid(h, w, c):
-                        with T.block("compute"):
-                            T.reads(image_buf[n_idx, h_idx, w_idx, c_idx])
-                            T.writes(out_buf[n_idx, h_idx, w_idx, c_idx])
-                            if 0 == c_idx:
-                                mean[0] = 0.48145466
-                                stddev[0] = 0.26862954
-                            elif 1 == c_idx:
-                                mean[0] = 0.4578275
-                                stddev[0] = 0.26130258
-                            elif 2 == c_idx:
-                                mean[0] = 0.40821073
-                                stddev[0] = 0.27577711
+                n_idx = 0
+                #for n_idx in T.thread_binding(n, thread="blockIdx.x"):
+                for h_idx in T.thread_binding(h, thread="blockIdx.x"):
+                    #for h_idx in T.thread_binding(h, thread="blockIdx.y"):
+                    for w_idx in T.thread_binding(w, thread="blockIdx.y"):
+                        #for w_idx in T.thread_binding(w, thread="threadIdx.x"):
+                        for c_idx in T.thread_binding(c, thread="threadIdx.x"):
+                            #for c_idx in range(c):
+                    #for h_iw_idx, c_idx in T.grid(h, w, c):
+                            with T.block("compute"):
+                                T.reads(image_buf[n_idx, h_idx, w_idx, c_idx])
+                                T.writes(out_buf[n_idx, h_idx, w_idx, c_idx])
+                                if 0 == c_idx:
+                                    mean[0] = 0.48145466
+                                    stddev[0] = 0.26862954
+                                elif 1 == c_idx:
+                                    mean[0] = 0.4578275
+                                    stddev[0] = 0.26130258
+                                elif 2 == c_idx:
+                                    mean[0] = 0.40821073
+                                    stddev[0] = 0.27577711
 
-                            out_buf[n_idx, h_idx, w_idx, c_idx] = (
-                                T.cast(image_buf[n_idx, h_idx, w_idx, c_idx], o_dtype) - mean[0]
-                            ) / stddev[0]
+                                out_buf[n_idx, h_idx, w_idx, c_idx] = (
+                                    T.cast(image_buf[n_idx, h_idx, w_idx, c_idx], o_dtype) - mean[0]
+                                ) / stddev[0]
 
             return normalize_func
 
@@ -191,18 +200,21 @@ class ImageProcessor(Module):
                 n, c, h, w = T.int64(), T.int64(), T.int64(), T.int64()
                 image_buf = T.match_buffer(image, (n, h, w, c), dtype=dtype)
                 out_buf = T.match_buffer(out, (n, h + t + b, w + l + r, c), dtype=dtype)
-
-                for n_idx in T.thread_binding(n, thread="blockIdx.x"):
-                    for h_idx, w_idx, c_idx in T.grid(h + t + b, w + l + r, c):
-                        with T.block("compute"):
-                            T.reads(image_buf[n_idx, h_idx, w_idx, c_idx])
-                            T.writes(out_buf[n_idx, h_idx, w_idx, c_idx])
-                            if h_idx < t or h_idx > h + b or w_idx < l or w_idx > w + r:
-                                out_buf[n_idx, h_idx, w_idx, c_idx] = fill
-                            else:
-                                out_buf[n_idx, h_idx, w_idx, c_idx] = image_buf[
-                                    n_idx, h_idx - t, w_idx - l, c_idx
-                                ]
+                #for n_idx in T.thread_binding(n, thread="blockIdx.x"):
+                #    for h_idx, w_idx, c_idx in T.grid(h + t + b, w + l + r, c):
+                n_idx = 0
+                for h_idx in T.thread_binding(h + t + b, thread="blockIdx.x"):
+                    for w_idx in T.thread_binding(w + l + r, thread="blockIdx.y"):
+                        for c_idx in T.thread_binding(c, thread="threadIdx.x"):
+                            with T.block("compute"):
+                                T.reads(image_buf[n_idx, h_idx, w_idx, c_idx])
+                                T.writes(out_buf[n_idx, h_idx, w_idx, c_idx])
+                                if h_idx < t or h_idx > h + b or w_idx < l or w_idx > w + r:
+                                    out_buf[n_idx, h_idx, w_idx, c_idx] = fill
+                                else:
+                                    out_buf[n_idx, h_idx, w_idx, c_idx] = image_buf[
+                                        n_idx, h_idx - t, w_idx - l, c_idx
+                                    ]
 
             return pad_func
 

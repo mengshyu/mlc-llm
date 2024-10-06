@@ -63,12 +63,24 @@ Result<NDArray> LoadImageFromBase64(const std::string& base64_str) {
   unsigned char* image_data =
       stbi_load_from_memory(decoded.data(), decoded_size, &width, &height, &num_channels, 3);
   if (!image_data) {
-    return TResult::Error(stbi_failure_reason());
+    return TResult::Error("kobe, stbi fail!");
+    //return TResult::Error(stbi_failure_reason());
   }
   auto image_ndarray = NDArray::Empty({height, width, 3}, {kDLUInt, 8, 1}, {kDLCPU, 0});
   image_ndarray.CopyFromBytes((void*)image_data, width * height * 3);
   stbi_image_free(image_data);
   return TResult::Ok(image_ndarray);
+}
+
+NDArray Bypass(NDArray image_data, int target_size, DLDevice device) {
+  int height = image_data->shape[0];
+  int width = image_data->shape[1];
+
+  auto image_ndarray = NDArray::Empty({1, height, width, 3}, {kDLUInt, 8, 1}, device);
+  image_ndarray.CopyFromBytes((void*)image_data->data,
+                              height * width * 3 * sizeof(uint8_t));
+
+  return image_ndarray;
 }
 
 NDArray ClipPreprocessor(NDArray image_data, int target_size, DLDevice device) {
