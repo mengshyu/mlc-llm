@@ -7,6 +7,7 @@
 #define MLC_LLM_JSON_FFI_IMAGE_UTILS_H_
 
 #include <tvm/runtime/ndarray.h>
+#include <tvm/runtime/container/shape_tuple.h>
 
 #include <optional>
 #include <string>
@@ -15,7 +16,7 @@
 
 namespace mlc {
 namespace llm {
-namespace json_ffi {
+namespace image {
 
 /*! \brief Load a base64 encoded image string into a CPU NDArray of shape {height, width, 3} */
 Result<tvm::runtime::NDArray> LoadImageFromBase64(const std::string& base64_str);
@@ -27,7 +28,9 @@ tvm::runtime::NDArray ClipPreprocessor(tvm::runtime::NDArray image_data, int tar
 tvm::runtime::NDArray Bypass(tvm::runtime::NDArray image_data, int target_size,
                                        DLDevice device);
 
-}  // namespace json_ffi
+void CalculateResizedShape(std::string model_type, tvm::runtime::ShapeTuple& input_shape, tvm::runtime::ShapeTuple& output_shape);
+
+}  // namespace image
 }  // namespace llm
 }  // namespace mlc
 

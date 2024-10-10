@@ -13,6 +13,7 @@
 #include <fstream>
 
 #include "../support/json_parser.h"
+#include "../support/image_utils.h"
 #include "config.h"
 #include "logit_processor.h"
 
@@ -114,8 +115,12 @@ class ModelImpl : public ModelObj {
     NVTXScopedRange nvtx_scope("ImageEmbed");
     CHECK(ft_.image_embed_func_.defined()) << "`image_embed` function is not found in the model. ";
     auto image_dref_or_nd = ft_.CopyToWorker0(image, "image", image.Shape());
-    ShapeTuple h = {100};
-    ShapeTuple w = {100};
+    ShapeTuple input_shape = {1008, 1344};
+    ShapeTuple output_shape = {};
+    ShapeTuple h = {336};
+    ShapeTuple w = {336};
+
+    image::CalculateResizedShape(model_type_, input_shape, output_shape);
     ObjectRef embeddings = ft_.image_embed_func_(image_dref_or_nd, h, w, params_);
     if (dst != nullptr) {
       CHECK(dst->defined());
@@ -973,12 +978,14 @@ class ModelImpl : public ModelObj {
         json::LookupOrDefault<int64_t>(config, "attention_sink_size", this->attention_sink_size_);
     this->attention_sink_size_ = std::max(this->attention_sink_size_, 0);
     this->vocab_size_ = json::Lookup<int64_t>(config, "vocab_size");
+    this->model_type_ = json::Lookup<std::string>(config, "model_type");
   }
 
   //----------------------------
   // Model configurations
   //----------------------------
   std::string model_;
+  std::string model_type_;
   int sliding_window_size_ = -1;
   int attention_sink_size_ = 0;
   int num_shards_ = -1;

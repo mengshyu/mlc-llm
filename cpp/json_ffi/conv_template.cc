@@ -3,7 +3,7 @@
 #include <tvm/runtime/registry.h>
 
 #include "../support/json_parser.h"
-#include "image_utils.h"
+#include "../support/image_utils.h"
 
 namespace mlc {
 namespace llm {
@@ -314,7 +314,7 @@ Result<std::vector<Data>> CreatePrompt(const Conversation& conv,
                                        // should be a map, with a "url" key containing the URL, but
                                        // we are just assuming this as the URL for now
             std::string base64_image = image_url.substr(image_url.find(",") + 1);
-            Result<NDArray> image_data_res = LoadImageFromBase64(base64_image);
+            Result<NDArray> image_data_res = image::LoadImageFromBase64(base64_image);
             if (image_data_res.IsErr()) {
               return TResult::Error(image_data_res.UnwrapErr());
             }
@@ -327,7 +327,7 @@ Result<std::vector<Data>> CreatePrompt(const Conversation& conv,
             int embed_size = (image_size * image_size) / (patch_size * patch_size);
 
             //auto image_ndarray = ClipPreprocessor(image_data_res.Unwrap(), image_size, device);
-            auto image_ndarray = Bypass(image_data_res.Unwrap(), image_size, device);
+            auto image_ndarray = image::Bypass(image_data_res.Unwrap(), image_size, device);
             // lazily commit text data
             if (pending_text.length() != 0) {
               message_list.push_back(TextData(pending_text));

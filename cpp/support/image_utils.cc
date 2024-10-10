@@ -8,7 +8,7 @@
 
 namespace mlc {
 namespace llm {
-namespace json_ffi {
+namespace image {
 
 using namespace tvm::runtime;
 
@@ -163,6 +163,11 @@ NDArray ClipPreprocessor(NDArray image_data, int target_size, DLDevice device) {
   return image_ndarray;
 }
 
-}  // namespace json_ffi
+void CalculateResizedShape(std::string model_type, ShapeTuple& input_shape, ShapeTuple& output_shape)
+{
+
+}
+
+}  // namespace image
 }  // namespace llm
 }  // namespace mlc
