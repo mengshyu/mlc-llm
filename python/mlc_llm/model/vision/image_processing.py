@@ -54,7 +54,7 @@ class ImageProcessor(Module):
                 ret_w = tir.Select(w <= h, new_short, new_long)
                 return (ret_h, ret_w)
             elif "hd_transform" in params:
-                hd_num = 16 if "hd_num" not in params else params["hd_num"]
+                hd_num = 4 if "hd_num" not in params else params["hd_num"]
                 pad_num = 336 if "pad_num" not in params else params["pad_num"]
                 ratio = tir.Select(
                     w > h,
@@ -77,7 +77,7 @@ class ImageProcessor(Module):
                 assert False, "not supported resize parameter"
 
         (new_h, new_w) = get_output_image_size(image)
-        out = op.interpolate(image, (new_h, new_w), data_layout="NCHW", mode="bicubic")
+        out = op.interpolate(image, (new_h, new_w), data_layout="NCHW", mode="linear")
         return out
 
     # pylint: disable=too-many-arguments,too-many-locals
