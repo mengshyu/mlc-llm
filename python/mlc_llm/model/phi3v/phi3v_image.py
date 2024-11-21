@@ -25,7 +25,6 @@ class ImageProjection(Module):  # pylint: disable=too-many-instance-attributes
     def forward(self, image_features: Tensor) -> Tensor:
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
-
         hidden_states = op.wrap_nested(
             relax.BlockBuilder()
             .current()
@@ -37,7 +36,6 @@ class ImageProjection(Module):  # pylint: disable=too-many-instance-attributes
             ),
             "hidden_states",
         )
-
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
@@ -66,34 +64,41 @@ class Phi3ImageEmbedding(Module):
         sch.bind(ty, "threadIdx.y")
         sch.bind(tx, "threadIdx.x")
 
-    def dyn_repeat(self, input, repeats, axis) -> Tensor:
-        def create_dyn_repeat_func(repeats, axis, dtype):
+    def dyn_repeat_4d_tensor(self, input, r0, r1, r2, r3) -> Tensor:
+        assert 4 == input.ndim, "input should be 4D data tensor"
+        def create_dyn_repeat_func(dtype):
             @T.prim_func
-            def dyn_repeat_func(input: T.handle, output: T.handle):
+            def dyn_repeat_4d_tensor_func(
+                    input: T.handle,
+                    output: T.handle,
+                    ch0: T.int64(),
+                    ch1: T.int64(),
+                    ch2: T.int64(),
+                    ch3: T.int64()
+                    ):
                 T.func_attr({"op_pattern": 8, "tir.noalias": True, "tir.is_scheduled": 1})
                 n, c, h, w = T.int64(), T.int64(), T.int64(), T.int64()
                 input_buf = T.match_buffer(input, (n, c, h, w), dtype=dtype)
-                out_buf = T.match_buffer(output, (n, c * repeats, h, w), dtype=dtype)
-                out_c = c * repeats
+                out_buf = T.match_buffer(output, (n * ch0, c * ch1, h * ch2, w * ch3), dtype=dtype)
 
-                for n_idx in T.thread_binding(n, thread="blockIdx.x"):
-                    for c_idx in T.thread_binding(out_c, thread="blockIdx.y"):
-                        for h_idx, w_idx in T.grid(h, w):
-                            with T.block("dyn_repeat"):
+                for n_idx in T.thread_binding(n * ch0, thread="blockIdx.x"):
+                    for c_idx in T.thread_binding(c * ch1, thread="blockIdx.y"):
+                        for h_idx, w_idx in T.grid(h * ch2, w * ch3):
+                            with T.block("dyn_repeat_4d_tensor"):
                                 T.reads(input_buf[n_idx, c_idx, h_idx, w_idx])
                                 T.writes(out_buf[n_idx, c_idx, h_idx, w_idx])
-                                out_buf[n_idx, c_idx, h_idx, w_idx] = input_buf[n_idx, c_idx % c, h_idx, w_idx]
-            sch = tir.Schedule(dyn_repeat_func)
-            self.apply_schedule(sch, sch.get_block("dyn_repeat"))
+                                out_buf[n_idx, c_idx, h_idx, w_idx] = input_buf[n_idx % n, c_idx % c, h_idx % h, w_idx % w]
+            return dyn_repeat_4d_tensor_func
+            sch = tir.Schedule(dyn_repeat_4d_tensor_func)
+            self.apply_schedule(sch, sch.get_block("dyn_repeat_4d_tensor"))
             return sch.mod["main"].with_attr("tir.is_scheduled", 1)
 
-        assert 1 == axis
         n, c, h, w = input.shape
         out = op.tensor_ir_op(
-            create_dyn_repeat_func(repeats, axis, input.dtype),
-            "dyn_repeat",
-            [input],
-            [Tensor.placeholder([n, c * repeats, h, w], input.dtype)],
+            create_dyn_repeat_func(input.dtype),
+            "dyn_repeat_4d_tensor",
+            [input, r0, r1, r2, r3],
+            [Tensor.placeholder([n * r0, c * r1, h * r2, w * r3], input.dtype)]
         )
         return out
 
@@ -180,13 +185,13 @@ class Phi3ImageEmbedding(Module):
         N, L, C = image_features.shape
         num_images = 1
         H = int(L**0.5)
-        image_features = nn.op.reshape(image_features, ([N, H, H, C]))
-        image_features = nn.op.reshape(image_features, ([N, H // 2, 2, H // 2, 2, C]))
-        image_features = nn.op.permute_dims(image_features, axes=([0, 1, 3, 2, 4, 5]))
-        image_features = nn.op.reshape(image_features, ([num_images, -1, 4 * C]))
+        image_features = nn.op.reshape(image_features, ([N, H, H, C])) # N, 24, 24, 1024
+        image_features = nn.op.reshape(image_features, ([N, H // 2, 2, H // 2, 2, C])) # N, 12, 2, 12, 2, 1024
+        image_features = nn.op.permute_dims(image_features, axes=([0, 1, 3, 2, 4, 5])) # N, 12, 12, 2, 2, 1024
+        image_features = nn.op.reshape(image_features, ([N, -1, 4 * C])) # N, 144, 4096
         image_features = nn.op.reshape(image_features, ([num_images, h_crop, w_crop, H // 2, H // 2, -1]))
         image_features = nn.op.permute_dims(image_features, axes=([0, 1, 3, 2, 4, 5]))
-        image_features_hd = nn.op.reshape(image_features, ([num_images, (h_crop * H) // 2, (w_crop * H) // 2, 4 * C]))
+        image_features_hd = nn.op.reshape(image_features, ([num_images, h_crop * H // 2, w_crop * H // 2, 4 * C]))
         return image_features_hd
 
     def add_image_newline(self, image_features_hd):
@@ -195,8 +200,7 @@ class Phi3ImageEmbedding(Module):
         output: (num_images, (h_crop*12) * (w_crop*12+1), 4096)
         """
         num_images, h, w, hid_dim = image_features_hd.shape
-
-        temp_sub_GN = self.dyn_repeat(self.sub_GN, 1, 1)
+        temp_sub_GN = self.dyn_repeat_4d_tensor(self.sub_GN, T.int64(1), T.int64(h), T.int64(1), T.int64(1))
         image_features_hd_newline = self.dyn_concate_dim_2(image_features_hd, temp_sub_GN)
         image_features_hd_newline = nn.op.reshape(image_features_hd_newline, ([num_images, -1, hid_dim]))
         return image_features_hd_newline
@@ -205,24 +209,24 @@ class Phi3ImageEmbedding(Module):
     def forward(self, pixel_values: Tensor, raw_image_h, raw_image_w) -> Tensor:
 
         img_features = self.get_img_features(pixel_values)
-        H = T.int32((img_features.shape[1] ** 0.5))
         img_features = nn.op.split(img_features, indices_or_sections=[1], axis=0)
+
         global_image_features = img_features[0]
         global_image_features_hd = self.reshape_hd_patches_2x2merge(global_image_features, 1, 1)
-
         global_image_features_hd_newline = self.add_image_newline(global_image_features_hd)
 
-        h_crop =  raw_image_h // self.image_size
-        w_crop =  raw_image_w // self.image_size
-        num_crops = h_crop * w_crop
+        #h_crop =  raw_image_h // self.image_size
+        #w_crop =  raw_image_w // self.image_size
+        h_crop =  672 // self.image_size
+        w_crop =  672 // self.image_size
         sub_image_features = img_features[1]
         sub_image_features_hd = self.reshape_hd_patches_2x2merge(sub_image_features, h_crop, w_crop)
         sub_image_features_hd_newline = self.add_image_newline(sub_image_features_hd)
 
         global_image_features_hd = nn.op.squeeze(global_image_features_hd, 0)
 
-        output_img = self.dyn_concate_dim_1(sub_image_features_hd_newline, self.glb_GN)
-        output_img = self.dyn_concate_dim_1(output_img, global_image_features_hd)
-        img_set_tensor = self.img_projection(output_img)
-        img_set_tensor = nn.op.squeeze(img_set_tensor, 0)
-        return img_set_tensor
+        combined_image = self.dyn_concate_dim_1(sub_image_features_hd_newline, self.glb_GN)
+        combined_image = self.dyn_concate_dim_1(combined_image, global_image_features_hd_newline)
+        output_image = self.img_projection(combined_image)
+        output_image = nn.op.squeeze(output_image, 0)
+        return output_image

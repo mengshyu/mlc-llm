@@ -61,9 +61,18 @@ class ImageProcessor(Module):
                     tir.div(tir.generic.cast(w, "float32"), tir.generic.cast(h, "float32")),
                     tir.div(tir.generic.cast(h, "float32"), tir.generic.cast(w, "float32")),
                 )
-                scale = tir.floordiv(
-                    -1 + tir.generic.cast(tir.sqrt(1 + 4 * hd_num * ratio), "int64"), 2
+
+                scale = tir.ceil(
+                    tir.sqrt(tir.generic.cast(hd_num, "float32") * ratio)
                 )
+
+                scale = tir.Select(
+                    (scale * tir.ceil(tir.div(scale, ratio))) > hd_num,
+                    scale - 1,
+                    scale,
+                )
+                scale = tir.generic.cast(scale, "int64")
+
                 new_w = tir.Select(
                     w >= h,
                     scale * pad_num,
