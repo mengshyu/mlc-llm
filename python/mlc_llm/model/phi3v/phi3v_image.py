@@ -25,17 +25,17 @@ class ImageProjection(Module):  # pylint: disable=too-many-instance-attributes
     def forward(self, image_features: Tensor) -> Tensor:
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
-        hidden_states = op.wrap_nested(
-            relax.BlockBuilder()
-            .current()
-            .match_cast(
-                hidden_states._expr,
-                relax.TensorStructInfo(
-                    [hidden_states.shape[0], hidden_states.shape[1], 3072], hidden_states.dtype
-                ),
-            ),
-            "hidden_states",
-        )
+        #hidden_states = op.wrap_nested(
+        #    relax.BlockBuilder()
+        #    .current()
+        #    .match_cast(
+        #        hidden_states._expr,
+        #        relax.TensorStructInfo(
+        #            [hidden_states.shape[0], 3072], hidden_states.dtype
+        #        ),
+        #    ),
+        #    "hidden_states",
+        #)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
@@ -121,9 +121,10 @@ class Phi3ImageEmbedding(Module):
                                 if h_idx < h1:
                                     out_buf[n_idx, c_idx, h_idx, w_idx] = input_1_buf[n_idx, c_idx, h_idx, w_idx]
                                 else:
-                                    out_buf[n_idx, c_idx, h_idx, w_idx] = input_2_buf[n_idx, c_idx, h_idx, w_idx]
+                                    out_buf[n_idx, c_idx, h_idx, w_idx] = input_2_buf[n_idx, c_idx, h_idx - h1, w_idx]
 
 
+            return dyn_concate_dim_2_func
             sch = tir.Schedule(dyn_concate_dim_2_func)
             self.apply_schedule(sch, sch.get_block("dyn_concate_dim_2"))
             return sch.mod["main"].with_attr("tir.is_scheduled", 1)
@@ -158,9 +159,9 @@ class Phi3ImageEmbedding(Module):
                                 if h_idx < h1:
                                     out_buf[c_idx, h_idx, w_idx] = input_1_buf[c_idx, h_idx, w_idx]
                                 else:
-                                    out_buf[c_idx, h_idx, w_idx] = input_2_buf[c_idx, h_idx, w_idx]
+                                    out_buf[c_idx, h_idx, w_idx] = input_2_buf[c_idx, h_idx - h1, w_idx]
 
-
+            return dyn_concate_dim_1_func
             sch = tir.Schedule(dyn_concate_dim_1_func)
             self.apply_schedule(sch, sch.get_block("dyn_concate_dim_1"))
             return sch.mod["main"].with_attr("tir.is_scheduled", 1)
@@ -207,7 +208,7 @@ class Phi3ImageEmbedding(Module):
 
     # pylint: disable=too-many-locals,too-many-locals,unused-argument
     def forward(self, pixel_values: Tensor, raw_image_h, raw_image_w) -> Tensor:
-
+        print(f"pixel shape:{pixel_values.shape}")
         img_features = self.get_img_features(pixel_values)
         img_features = nn.op.split(img_features, indices_or_sections=[1], axis=0)
 
@@ -223,10 +224,12 @@ class Phi3ImageEmbedding(Module):
         sub_image_features_hd = self.reshape_hd_patches_2x2merge(sub_image_features, h_crop, w_crop)
         sub_image_features_hd_newline = self.add_image_newline(sub_image_features_hd)
 
-        global_image_features_hd = nn.op.squeeze(global_image_features_hd, 0)
+        global_image_features_hd = nn.op.squeeze(global_image_features_hd_newline, 0)
 
         combined_image = self.dyn_concate_dim_1(sub_image_features_hd_newline, self.glb_GN)
         combined_image = self.dyn_concate_dim_1(combined_image, global_image_features_hd_newline)
+        print("combined image shape:", combined_image.shape)
+        combined_image = nn.op.squeeze(combined_image, 0)
+        print("combined image shape 2:", combined_image.shape)
         output_image = self.img_projection(combined_image)
-        output_image = nn.op.squeeze(output_image, 0)
         return output_image

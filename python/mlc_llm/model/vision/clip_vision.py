@@ -186,6 +186,7 @@ class CLIPEncoderLayer(Module):
 class CLIPEncoder(Module):
     def __init__(self, config: CLIPVisionConfig):
         super().__init__()
+        print("vision encoder layers", config.num_hidden_layers)
         self.layers = nn.ModuleList(
             [CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
