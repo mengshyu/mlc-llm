@@ -217,9 +217,12 @@ class Phi3VForCausalLM(nn.Module):
         return embeds
 
     # pylint: disable=protected-access
-    def image_preprocess(self, pixel_values: Tensor, num_crops=5) -> Tensor:
+    def image_preprocess(self, pixel_values: Tensor,
+            resized_height, resized_width, num_crops=5) -> Tensor:
         pixel_values = op.permute_dims(pixel_values, axes=(0, 3, 1, 2))  # NHWC -> NCHW
-        pixel_values = self.image_processor.resize(pixel_values, params={"hd_transform": 336})
+        pixel_values = self.image_processor.resize(
+            pixel_values, params={"height": resized_height, "width": resized_width}
+                )
         new_h = tir.Var("new_h", "int64")
         new_w = tir.Var("new_w", "int64")
         pixel_values = op.wrap_nested(
@@ -235,6 +238,7 @@ class Phi3VForCausalLM(nn.Module):
         )
 
         pixel_values = self.image_processor.pad(pixel_values)
+
         pixel_values = self.image_processor.rescale(pixel_values)
         pixel_values = self.image_processor.normalize(pixel_values)
         global_image = self.image_processor.resize(
@@ -276,9 +280,9 @@ class Phi3VForCausalLM(nn.Module):
 
         return combined_image
 
-    def image_embed(self, pixel_values: Tensor) -> Tensor:
+    def image_embed(self, pixel_values: Tensor, resized_height, resized_width) -> Tensor:
         n, h, w, c = pixel_values.shape  # pylint: disable=unused-variable
-        pixel_values = self.image_preprocess(pixel_values)
+        pixel_values = self.image_preprocess(pixel_values, resized_height, resized_width)
         pixel_values = pixel_values.astype(self.dtype)
         return self.vision_embed_tokens(pixel_values, h, w)
 
@@ -319,6 +323,7 @@ class Phi3VForCausalLM(nn.Module):
             },
             "image_embed": {
                 "pixel_values": nn.spec.Tensor([1, "image_height", "image_width", 3], "uint8"),
+                "resized_height": nn.spec.Int(), "resized_width": nn.spec.Int(),
                 "$": {
                     "param_mode": "packed",
                     "effect_mode": "none",
