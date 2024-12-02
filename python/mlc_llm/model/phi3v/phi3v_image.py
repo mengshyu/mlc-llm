@@ -23,19 +23,22 @@ class ImageProjection(Module):  # pylint: disable=too-many-instance-attributes
         self.linear_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
 
     def forward(self, image_features: Tensor) -> Tensor:
+
+        shape_1 = tir.Var("shape_1", "int64")
+        image_features = op.wrap_nested(
+            relax.BlockBuilder()
+            .current()
+            .match_cast(
+                image_features._expr,
+                relax.TensorStructInfo(
+                    [shape_1, image_features.shape[1]], image_features.dtype
+                ),
+            ),
+            "image_features",
+        )
+
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
-        #hidden_states = op.wrap_nested(
-        #    relax.BlockBuilder()
-        #    .current()
-        #    .match_cast(
-        #        hidden_states._expr,
-        #        relax.TensorStructInfo(
-        #            [hidden_states.shape[0], 3072], hidden_states.dtype
-        #        ),
-        #    ),
-        #    "hidden_states",
-        #)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
@@ -207,8 +210,7 @@ class Phi3ImageEmbedding(Module):
         return image_features_hd_newline
 
     # pylint: disable=too-many-locals,too-many-locals,unused-argument
-    def forward(self, pixel_values: Tensor, raw_image_h, raw_image_w) -> Tensor:
-        print(f"pixel shape:{pixel_values.shape}")
+    def forward(self, pixel_values: Tensor, image_h, image_w) -> Tensor:
         img_features = self.get_img_features(pixel_values)
         img_features = nn.op.split(img_features, indices_or_sections=[1], axis=0)
 
@@ -216,10 +218,9 @@ class Phi3ImageEmbedding(Module):
         global_image_features_hd = self.reshape_hd_patches_2x2merge(global_image_features, 1, 1)
         global_image_features_hd_newline = self.add_image_newline(global_image_features_hd)
 
-        #h_crop =  raw_image_h // self.image_size
-        #w_crop =  raw_image_w // self.image_size
-        h_crop =  672 // self.image_size
-        w_crop =  672 // self.image_size
+        h_crop =  tir.generic.cast(image_h, "int64") // self.image_size
+        w_crop =  tir.generic.cast(image_w, "int64") // self.image_size
+        print(f"h/w crop:{h_crop, w_crop}")
         sub_image_features = img_features[1]
         sub_image_features_hd = self.reshape_hd_patches_2x2merge(sub_image_features, h_crop, w_crop)
         sub_image_features_hd_newline = self.add_image_newline(sub_image_features_hd)
@@ -228,8 +229,6 @@ class Phi3ImageEmbedding(Module):
 
         combined_image = self.dyn_concate_dim_1(sub_image_features_hd_newline, self.glb_GN)
         combined_image = self.dyn_concate_dim_1(combined_image, global_image_features_hd_newline)
-        print("combined image shape:", combined_image.shape)
         combined_image = nn.op.squeeze(combined_image, 0)
-        print("combined image shape 2:", combined_image.shape)
         output_image = self.img_projection(combined_image)
         return output_image

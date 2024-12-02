@@ -223,22 +223,23 @@ class Phi3VForCausalLM(nn.Module):
         pixel_values = self.image_processor.resize(
             pixel_values, params={"height": resized_height, "width": resized_width}
                 )
-        new_h = tir.Var("new_h", "int64")
-        new_w = tir.Var("new_w", "int64")
-        pixel_values = op.wrap_nested(
-            relax.BlockBuilder()
-            .current()
-            .match_cast(
-                pixel_values._expr,
-                relax.TensorStructInfo(
-                    [pixel_values.shape[0], pixel_values.shape[1], new_h, new_w], pixel_values.dtype
-                ),
-            ),
-            "pixel_values",
-        )
+        #new_h = tir.Var("new_h", "int64")
+        #new_w = tir.Var("new_w", "int64")
+        #pixel_values = op.wrap_nested(
+        #    relax.BlockBuilder()
+        #    .current()
+        #    .match_cast(
+        #        pixel_values._expr,
+        #        relax.TensorStructInfo(
+        #            [pixel_values.shape[0], pixel_values.shape[1], new_h, new_w], pixel_values.dtype
+        #        ),
+        #    ),
+        #    "pixel_values",
+        #)
 
         pixel_values = self.image_processor.pad(pixel_values)
-
+        pad_n, pad_c, pad_h, pad_w = pixel_values.shape
+        print(f"padded shape:{pixel_values.shape}")
         pixel_values = self.image_processor.rescale(pixel_values)
         pixel_values = self.image_processor.normalize(pixel_values)
         global_image = self.image_processor.resize(
@@ -278,13 +279,13 @@ class Phi3VForCausalLM(nn.Module):
             "combined_image",
         )
 
-        return combined_image
+        return combined_image, pad_h, pad_w
 
     def image_embed(self, pixel_values: Tensor, resized_height, resized_width) -> Tensor:
         n, h, w, c = pixel_values.shape  # pylint: disable=unused-variable
-        pixel_values = self.image_preprocess(pixel_values, resized_height, resized_width)
+        pixel_values, pad_h, pad_w = self.image_preprocess(pixel_values, resized_height, resized_width)
         pixel_values = pixel_values.astype(self.dtype)
-        return self.vision_embed_tokens(pixel_values, h, w)
+        return self.vision_embed_tokens(pixel_values, pad_h, pad_w)
 
     def create_paged_kv_cache(  # pylint: disable=too-many-arguments
         self,
