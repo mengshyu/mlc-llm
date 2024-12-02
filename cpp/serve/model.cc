@@ -13,6 +13,7 @@
 #include <fstream>
 
 #include "../support/json_parser.h"
+#include "../support/image_utils.h"
 #include "config.h"
 #include "logit_processor.h"
 
@@ -114,8 +115,10 @@ class ModelImpl : public ModelObj {
     NVTXScopedRange nvtx_scope("ImageEmbed");
     CHECK(ft_.image_embed_func_.defined()) << "`image_embed` function is not found in the model. ";
 
-    ShapeTuple h = {624};
-    ShapeTuple w = {672};
+    int resized_h = 0, resized_w = 0;
+    CalculateResizeShape(image, this->model_type_, resized_h, resized_w);
+    ShapeTuple h = {resized_h};
+    ShapeTuple w = {resized_w};
     auto image_dref_or_nd = ft_.CopyToWorker0(image, "image", image.Shape());
     ObjectRef embeddings = ft_.image_embed_func_(image_dref_or_nd, h, w, params_);
     if (dst != nullptr) {

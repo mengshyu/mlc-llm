@@ -222,24 +222,9 @@ class Phi3VForCausalLM(nn.Module):
         pixel_values = op.permute_dims(pixel_values, axes=(0, 3, 1, 2))  # NHWC -> NCHW
         pixel_values = self.image_processor.resize(
             pixel_values, params={"height": resized_height, "width": resized_width}
-                )
-        #new_h = tir.Var("new_h", "int64")
-        #new_w = tir.Var("new_w", "int64")
-        #pixel_values = op.wrap_nested(
-        #    relax.BlockBuilder()
-        #    .current()
-        #    .match_cast(
-        #        pixel_values._expr,
-        #        relax.TensorStructInfo(
-        #            [pixel_values.shape[0], pixel_values.shape[1], new_h, new_w], pixel_values.dtype
-        #        ),
-        #    ),
-        #    "pixel_values",
-        #)
-
+        )
         pixel_values = self.image_processor.pad(pixel_values)
         pad_n, pad_c, pad_h, pad_w = pixel_values.shape
-        print(f"padded shape:{pixel_values.shape}")
         pixel_values = self.image_processor.rescale(pixel_values)
         pixel_values = self.image_processor.normalize(pixel_values)
         global_image = self.image_processor.resize(

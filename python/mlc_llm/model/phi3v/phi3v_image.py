@@ -92,9 +92,6 @@ class Phi3ImageEmbedding(Module):
                                 T.writes(out_buf[n_idx, c_idx, h_idx, w_idx])
                                 out_buf[n_idx, c_idx, h_idx, w_idx] = input_buf[n_idx % n, c_idx % c, h_idx % h, w_idx % w]
             return dyn_repeat_4d_tensor_func
-            sch = tir.Schedule(dyn_repeat_4d_tensor_func)
-            self.apply_schedule(sch, sch.get_block("dyn_repeat_4d_tensor"))
-            return sch.mod["main"].with_attr("tir.is_scheduled", 1)
 
         n, c, h, w = input.shape
         out = op.tensor_ir_op(
@@ -128,9 +125,6 @@ class Phi3ImageEmbedding(Module):
 
 
             return dyn_concate_dim_2_func
-            sch = tir.Schedule(dyn_concate_dim_2_func)
-            self.apply_schedule(sch, sch.get_block("dyn_concate_dim_2"))
-            return sch.mod["main"].with_attr("tir.is_scheduled", 1)
 
         n1, c1, h1, w1 = input_1.shape
         n2, c2, h2, w2 = input_2.shape
@@ -165,9 +159,6 @@ class Phi3ImageEmbedding(Module):
                                     out_buf[c_idx, h_idx, w_idx] = input_2_buf[c_idx, h_idx - h1, w_idx]
 
             return dyn_concate_dim_1_func
-            sch = tir.Schedule(dyn_concate_dim_1_func)
-            self.apply_schedule(sch, sch.get_block("dyn_concate_dim_1"))
-            return sch.mod["main"].with_attr("tir.is_scheduled", 1)
 
         c1, h1, w1 = input_1.shape
         c2, h2, w2 = input_2.shape
@@ -218,9 +209,8 @@ class Phi3ImageEmbedding(Module):
         global_image_features_hd = self.reshape_hd_patches_2x2merge(global_image_features, 1, 1)
         global_image_features_hd_newline = self.add_image_newline(global_image_features_hd)
 
-        h_crop =  tir.generic.cast(image_h, "int64") // self.image_size
-        w_crop =  tir.generic.cast(image_w, "int64") // self.image_size
-        print(f"h/w crop:{h_crop, w_crop}")
+        h_crop = tir.generic.cast(image_h, "int64") // self.image_size
+        w_crop = tir.generic.cast(image_w, "int64") // self.image_size
         sub_image_features = img_features[1]
         sub_image_features_hd = self.reshape_hd_patches_2x2merge(sub_image_features, h_crop, w_crop)
         sub_image_features_hd_newline = self.add_image_newline(sub_image_features_hd)
