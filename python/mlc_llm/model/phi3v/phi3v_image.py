@@ -23,7 +23,6 @@ class ImageProjection(Module):  # pylint: disable=too-many-instance-attributes
         self.linear_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
 
     def forward(self, image_features: Tensor) -> Tensor:
-
         shape_1 = tir.Var("shape_1", "int64")
         image_features = op.wrap_nested(
             relax.BlockBuilder()
@@ -182,11 +181,46 @@ class Phi3ImageEmbedding(Module):
         H = int(L**0.5)
         image_features = nn.op.reshape(image_features, ([N, H, H, C])) # N, 24, 24, 1024
         image_features = nn.op.reshape(image_features, ([N, H // 2, 2, H // 2, 2, C])) # N, 12, 2, 12, 2, 1024
+
+        new_s1 = tir.Var("new_s1", "int64")
+        new_s2 = tir.Var("new_s2", "int64")
+
+        image_features = op.wrap_nested(
+            relax.BlockBuilder()
+            .current()
+            .match_cast(
+                image_features._expr,
+                relax.TensorStructInfo(
+                    [image_features.shape[0], new_s1, image_features.shape[2], new_s2, image_features.shape[4], image_features.shape[5]], image_features.dtype
+                ),
+            ),
+            "image_features_1",
+        )
+
+
         image_features = nn.op.permute_dims(image_features, axes=([0, 1, 3, 2, 4, 5])) # N, 12, 12, 2, 2, 1024
         image_features = nn.op.reshape(image_features, ([N, -1, 4 * C])) # N, 144, 4096
         image_features = nn.op.reshape(image_features, ([num_images, h_crop, w_crop, H // 2, H // 2, -1]))
+
+        new_s3 = tir.Var("new_s3", "int64")
+        new_s4 = tir.Var("new_s4", "int64")
+
+        image_features = op.wrap_nested(
+            relax.BlockBuilder()
+            .current()
+            .match_cast(
+                image_features._expr,
+                relax.TensorStructInfo(
+                    [image_features.shape[0], new_s3, image_features.shape[2], new_s4, image_features.shape[4], image_features.shape[5]], image_features.dtype
+                ),
+            ),
+            "image_features_2",
+        )
+
+
         image_features = nn.op.permute_dims(image_features, axes=([0, 1, 3, 2, 4, 5]))
         image_features_hd = nn.op.reshape(image_features, ([num_images, h_crop * H // 2, w_crop * H // 2, 4 * C]))
+
         return image_features_hd
 
     def add_image_newline(self, image_features_hd):
@@ -201,7 +235,7 @@ class Phi3ImageEmbedding(Module):
         return image_features_hd_newline
 
     # pylint: disable=too-many-locals,too-many-locals,unused-argument
-    def forward(self, pixel_values: Tensor, image_h, image_w) -> Tensor:
+    def forward(self, pixel_values: Tensor, h_crop, w_crop) -> Tensor:
         img_features = self.get_img_features(pixel_values)
         img_features = nn.op.split(img_features, indices_or_sections=[1], axis=0)
 
@@ -209,8 +243,6 @@ class Phi3ImageEmbedding(Module):
         global_image_features_hd = self.reshape_hd_patches_2x2merge(global_image_features, 1, 1)
         global_image_features_hd_newline = self.add_image_newline(global_image_features_hd)
 
-        h_crop = tir.generic.cast(image_h, "int64") // self.image_size
-        w_crop = tir.generic.cast(image_w, "int64") // self.image_size
         sub_image_features = img_features[1]
         sub_image_features_hd = self.reshape_hd_patches_2x2merge(sub_image_features, h_crop, w_crop)
         sub_image_features_hd_newline = self.add_image_newline(sub_image_features_hd)
@@ -220,5 +252,19 @@ class Phi3ImageEmbedding(Module):
         combined_image = self.dyn_concate_dim_1(sub_image_features_hd_newline, self.glb_GN)
         combined_image = self.dyn_concate_dim_1(combined_image, global_image_features_hd_newline)
         combined_image = nn.op.squeeze(combined_image, 0)
+
+        new_s7 = tir.Var("new_s7", "int64")
+
+        combined_image = op.wrap_nested(
+            relax.BlockBuilder()
+            .current()
+            .match_cast(
+                combined_image._expr,
+                relax.TensorStructInfo(
+                    [new_s7, combined_image.shape[1]], combined_image.dtype
+                ),
+            ),
+            "combined_image",
+        )
         output_image = self.img_projection(combined_image)
         return output_image

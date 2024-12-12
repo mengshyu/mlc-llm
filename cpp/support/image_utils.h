@@ -15,6 +15,7 @@ namespace llm {
 
 /*! \brief Calculate output shape of resize function for vision model. */
 void CalculateResizeShape(tvm::runtime::NDArray image_data, std::string model_type, int &target_height, int &target_width);
+void CalculatePadSize(tvm::runtime::NDArray image_data, std::string model_type, int &pad_height, int &pad_width);
 
 }  // namespace llm
 }  // namespace mlc

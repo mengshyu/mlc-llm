@@ -266,11 +266,12 @@ class Phi3VForCausalLM(nn.Module):
 
         return combined_image, pad_h, pad_w
 
-    def image_embed(self, pixel_values: Tensor, resized_height, resized_width) -> Tensor:
+    def image_embed(self, pixel_values: Tensor, resized_height, resized_width, crop_height, crop_width) -> Tensor:
         n, h, w, c = pixel_values.shape  # pylint: disable=unused-variable
         pixel_values, pad_h, pad_w = self.image_preprocess(pixel_values, resized_height, resized_width)
         pixel_values = pixel_values.astype(self.dtype)
-        return self.vision_embed_tokens(pixel_values, pad_h, pad_w)
+        return self.vision_embed_tokens(pixel_values, crop_height, crop_width)
+        #return self.vision_embed_tokens(pixel_values, pad_h, pad_w)
 
     def create_paged_kv_cache(  # pylint: disable=too-many-arguments
         self,
@@ -310,6 +311,7 @@ class Phi3VForCausalLM(nn.Module):
             "image_embed": {
                 "pixel_values": nn.spec.Tensor([1, "image_height", "image_width", 3], "uint8"),
                 "resized_height": nn.spec.Int(), "resized_width": nn.spec.Int(),
+                "crop_height": nn.spec.Int(), "crop_width": nn.spec.Int(),
                 "$": {
                     "param_mode": "packed",
                     "effect_mode": "none",

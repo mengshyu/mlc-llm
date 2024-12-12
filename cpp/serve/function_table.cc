@@ -321,6 +321,16 @@ ObjectRef FunctionTable::CopyToWorker0(const NDArray& host_array, String buffer_
     NDArray buffer{nullptr};
     if (it != this->cached_buffers.end()) {
       buffer = Downcast<NDArray>((*it).second);
+      if (buffer_cache_key == "image") {
+        uint64_t buffer_size = runtime::GetDataSize(*buffer.operator->());
+        uint64_t new_buffer_size = runtime::GetDataSize(*host_array.operator->());
+        if (buffer_size < new_buffer_size) {
+          //DLManagedTensor* managed_tensor = buffer.ToDLPack();
+          //managed_tensor->deleter(managed_tensor);
+          buffer = NDArray::Empty(max_reserved_shape, host_array->dtype, local_gpu_device);
+          this->cached_buffers.Set(buffer_cache_key, buffer);
+        }
+      }
     } else {
       buffer = NDArray::Empty(max_reserved_shape, host_array->dtype, local_gpu_device);
       this->cached_buffers.Set(buffer_cache_key, buffer);
