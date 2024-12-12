@@ -119,8 +119,14 @@ class ModelImpl : public ModelObj {
     CalculateResizeShape(image, this->model_type_, resized_h, resized_w);
     ShapeTuple h = {resized_h};
     ShapeTuple w = {resized_w};
+
+    int pad_h = 0, pad_w = 0;
+    CalculatePadSize(image, this->model_type_, pad_h, pad_w);
+    ShapeTuple h_crop = {pad_h / 336};
+    ShapeTuple w_crop = {pad_w / 336};
+
     auto image_dref_or_nd = ft_.CopyToWorker0(image, "image", image.Shape());
-    ObjectRef embeddings = ft_.image_embed_func_(image_dref_or_nd, h, w, params_);
+    ObjectRef embeddings = ft_.image_embed_func_(image_dref_or_nd, h, w, h_crop, w_crop, params_);
     if (dst != nullptr) {
       CHECK(dst->defined());
       ft_.nd_copy_embedding_to_offset_func_(embeddings, *dst, offset);
