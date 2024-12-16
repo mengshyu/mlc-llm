@@ -271,7 +271,6 @@ class Phi3VForCausalLM(nn.Module):
         pixel_values, pad_h, pad_w = self.image_preprocess(pixel_values, resized_height, resized_width)
         pixel_values = pixel_values.astype(self.dtype)
         return self.vision_embed_tokens(pixel_values, crop_height, crop_width)
-        #return self.vision_embed_tokens(pixel_values, pad_h, pad_w)
 
     def create_paged_kv_cache(  # pylint: disable=too-many-arguments
         self,

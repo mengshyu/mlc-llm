@@ -37,6 +37,22 @@ class ImageProjection(Module):  # pylint: disable=too-many-instance-attributes
         )
 
         hidden_states = self.linear_1(image_features)
+
+        shape_2 = tir.Var("shape_2", "int64")
+        hidden_states = op.wrap_nested(
+            relax.BlockBuilder()
+            .current()
+            .match_cast(
+                hidden_states._expr,
+                relax.TensorStructInfo(
+                    [shape_2, hidden_states.shape[1]], hidden_states.dtype
+                ),
+            ),
+            "hidden_states",
+        )
+
+
+
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
