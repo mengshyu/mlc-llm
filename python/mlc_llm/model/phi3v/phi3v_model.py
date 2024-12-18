@@ -218,7 +218,7 @@ class Phi3VForCausalLM(nn.Module):
 
     # pylint: disable=protected-access
     def image_preprocess(self, pixel_values: Tensor,
-            resized_height, resized_width, num_crops=5) -> Tensor:
+            resized_height, resized_width, num_crops = 16) -> Tensor:
         pixel_values = op.permute_dims(pixel_values, axes=(0, 3, 1, 2))  # NHWC -> NCHW
         pixel_values = self.image_processor.resize(
             pixel_values, params={"height": resized_height, "width": resized_width}
@@ -251,7 +251,7 @@ class Phi3VForCausalLM(nn.Module):
 
         # pad to max num crops tensor
         b, c, h, w = combined_image.shape
-        zeros = op.zeros((num_crops - b, c, h, w))
+        zeros = op.zeros((num_crops + 1 - b, c, h, w))
         combined_image = op.concat([combined_image, zeros], dim=0)
 
         combined_image = op.wrap_nested(
@@ -259,7 +259,7 @@ class Phi3VForCausalLM(nn.Module):
             .current()
             .match_cast(
                 combined_image._expr,
-                relax.TensorStructInfo([num_crops, c, h, w], combined_image.dtype),
+                relax.TensorStructInfo([num_crops + 1, c, h, w], combined_image.dtype),
             ),
             "combined_image",
         )
